@@ -153,14 +153,18 @@ class InstaScrap(QWidget):
 			url = "http://gramlook.com/hashtag/{}/".format(request)
 			
 			# Collect all the requested picture
-			while len(results) < number_pictures :				
-				
+			while len(results) < number_pictures :	
+
+				counter_progress += 1
+
+				progress_callback.emit("Colecting Urls ", 0, 0)
+
 				# Set the soup 
 				page = requests.get(url)
 				soup = BeautifulSoup(page.content, 'html.parser')
 				
 				# Get all the images/videos pages
-				for a in soup.find_all('a', attrs={"style": "position:relative;display:inline-block;"}) :
+				for a in soup.find_all('a', attrs={"style": "position:relative;display:inline-block;"}) 
 					results.append(a['href'])
 
 				# If no results stop the function
@@ -171,6 +175,8 @@ class InstaScrap(QWidget):
 
 				# Jump to the next page
 				url = soup.find('a', href=True, attrs={"class": "ggbb"})["href"]
+
+			counter_progress = 0
 
 			# Adjust the page numbers to match the request	
 			adjust = len(results) - number_pictures
@@ -252,6 +258,7 @@ class InstaScrap(QWidget):
 				
 				counter_progress += 1
 				counter_videos += 1
+				counter_name = counter_progress
 				bar_length = len(videos)
 				progress_callback.emit("Downloading Videos ", counter_videos, bar_length)
 
