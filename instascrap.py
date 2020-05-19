@@ -164,7 +164,7 @@ class InstaScrap(QWidget):
 				soup = BeautifulSoup(page.content, 'html.parser')
 				
 				# Get all the images/videos pages
-				for a in soup.find_all('a', attrs={"style": "position:relative;display:inline-block;"}) 
+				for a in soup.find_all('a', attrs={"style": "position:relative;display:inline-block;"}): 
 					results.append(a['href'])
 
 				# If no results stop the function
@@ -225,10 +225,10 @@ class InstaScrap(QWidget):
 				# Create the file if file depending on file already present in the folder
 				try:
 					response = requests.get(image)
-					filename = str(counter_name) + ".png"
+					filename = str(counter_name) + ".jpg"
 					while os.path.isfile('./{}'.format(filename)) is True :
 						counter_name +=1
-						filename = str(counter_name) + ".png"	
+						filename = str(counter_name) + ".jpg"	
 				except:
 					continue
 
@@ -239,6 +239,7 @@ class InstaScrap(QWidget):
 					f.close()
 				except :
 					continue
+
 			# Reinit the name counter and the path for videos
 			os.chdir(self.path)	
 			counter_name = 1
