@@ -3,8 +3,9 @@ import sys
 import requests 
 import traceback
 import os.path
+import json
 
-from bs4 import *
+from pathlib import Path
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
@@ -89,7 +90,7 @@ class InstaScrap(QWidget):
 
 		# Set the threadpool
 		self.threadpool = QThreadPool()
-		self.threadpool.setMaxThreadCount(5)
+		self.threadpool.setMaxThreadCount(1)
 
 		# Set search box 
 		box_search = QVBoxLayout()
@@ -145,83 +146,65 @@ class InstaScrap(QWidget):
 
 			# Set the function variable
 			results =[]
-			images = []
-			videos = []
-			nextpage = []
+			path = os.getcwd()
+			url = "https://www.instagram.com/explore/tags/{}/?__a=1".format(request)
+			page = requests.get(url)
 			counter_progress = 0
-			counter_videos = 0
-			url = "http://gramlook.com/hashtag/{}/".format(request)
+			progress_callback.emit("Querying", counter_progress, counter_progress)
+
+			# get the json packages from instagram or raise an error if nothing
+			try :
+
+				jsonDump = page.json()['graphql']['hashtag']['edge_hashtag_to_media']['edges']
+
+			except KeyError:
+				self.label_indicator.setText("No Result")
+				self.btn_scrap.setEnabled(True)
+
 			
-			# Collect all the requested picture
-			while len(results) < number_pictures :	
 
-				counter_progress += 1
+			# Append the results from the json to a link list
+			for node in jsonDump :
+				results.append(node['node']['display_url'])
 
-				progress_callback.emit("Colecting Urls ", 0, 0)
-
-				# Set the soup 
-				page = requests.get(url)
-				soup = BeautifulSoup(page.content, 'html.parser')
+			# if there is not enough image in the first page then scroll to more results until it reachs the user input
+			if len(results) <= number_pictures and len(results) > 71:
 				
-				# Get all the images/videos pages
-				for a in soup.find_all('a', attrs={"style": "position:relative;display:inline-block;"}): 
-					results.append(a['href'])
+				while len(results) < number_pictures :
 
-				# If no results stop the function
-				if len(results) < 1:
-					self.label_indicator.setText("No Results")
-					self.btn_scrap.setEnabled(True)
-					break
+					# Modifying the url in order to scroll the pages
+					urlnext  =  url + "&max_id=" + page.json()['graphql']['hashtag']['edge_hashtag_to_media']['page_info']['end_cursor']
+					page = requests.get(urlnext)
+					jsonDump = page.json()['graphql']['hashtag']['edge_hashtag_to_media']['edges']
 
-				# Jump to the next page
-				url = soup.find('a', href=True, attrs={"class": "ggbb"})["href"]
+					# Add the new results to the list
+					for node in jsonDump :
+						results.append(node['node']['display_url'])
 
-			counter_progress = 0
+			# Reduce the list size to make it the same number as user input
+			if len(results) > number_pictures : 
+				accuration = len(results) - number_pictures
+				results = results[:-accuration]
 
-			# Adjust the page numbers to match the request	
-			adjust = len(results) - number_pictures
-			del results[-adjust:]
-			
-			# Scrap all the images with beautifulsoup
-			for result in results:
+			# Create the folder to contian the images
+			try:
+				dir_name =  path + '/{}/Images'.format(request)
+				os.makedirs(dir_name)
+				os.chdir(dir_name)
 
-				# Set the loop variables and the progressbar
-				counter_progress += 1
-				bar_length = len(results)
-				progress_callback.emit("Fetching ", counter_progress, bar_length)
-
-				# Set the soup 
-				page = requests.get(result)
-				soup = BeautifulSoup(page.content, 'html.parser')
-
-				# Add the videos and the images to their respectives list
-				try :
-					images.append(soup.find('img', src=True, attrs={'class':'bi'})["src"])
-				except :
-					videos.append(soup.find("source").get("src"))
-
-			# Reinit the counter for future loops
-			counter_progress = 0
-
-			# if there is images in the lists create the folder
-			if len(images) != 0 :
-				try :
-					dir_name = self.path + "/" + request + "/" + "Images"
-					os.makedirs(dir_name)
-					os.chdir(dir_name)
-				except :
-					print("Folder already exist")
-					os.chdir(dir_name)
-					
-			# Get all the images sources and save them
-			for image in images :
+			except OSError:
+				os.chdir(dir_name)
+				print("Folder already exists")
 				
+
+			for image in results : 
+
 				# Set the loop variables and update progressbar
 				counter_progress += 1
 				counter_name = counter_progress
-				bar_length = len(images)
+				bar_length = len(results)
 				progress_callback.emit("Downloading images ", counter_progress, bar_length)
-				
+
 				# Create the file if file depending on file already present in the folder
 				try:
 					response = requests.get(image)
@@ -238,58 +221,26 @@ class InstaScrap(QWidget):
 					f.write(response.content)
 					f.close()
 				except :
-					continue
-
-			# Reinit the name counter and the path for videos
+					sys.exit(5)
+			
+			# Reinit the name counter and the path and set the result
 			os.chdir(self.path)	
 			counter_name = 1
+			result = "Done !"
 
-			# Create video folder
-			if len(videos) != 0 :
-				try :
-					dir_name = self.path + "/" + request + "/" + "Videos"
-					os.makedirs(dir_name)
-					os.chdir(dir_name)
-				except :
-					print("Folder already exist")
-					os.chdir(dir_name)
+		return result
 
-			# Get videos sources, basically the same as image but for videos	
-			for video in videos :
-				
-				counter_progress += 1
-				counter_videos += 1
-				counter_name = counter_progress
-				bar_length = len(videos)
-				progress_callback.emit("Downloading Videos ", counter_videos, bar_length)
-
-				try:
-					response = requests.get(video)
-					filename = str(counter_name) + ".mp4"
-					while os.path.isfile('./{}'.format(filename)) is True :
-						counter_name +=1
-						filename = str(counter_name) + ".mp4"	
-				except:
-					continue
-
-				try:
-					f = open(filename, "wb")
-					f.write(response.content)
-					f.close()
-				except :
-					continue
-			# reinit the path to root folder
-			os.chdir(self.path)
-	
 	# Multi thread caller for the downloader
 	def launcher(self):
-
+		
 		worker = Worker(self.scrapper)
 		self.threadpool.start(worker)
+
 		worker.signals.start.connect(self.function_start)
 		worker.signals.progress.connect(self.function_progress)
 		worker.signals.result.connect(self.function_return)
 		worker.signals.finished.connect(self.function_end)
+		worker.signals.error.connect(self.function_error)
 
 	# Stuff when scrapper end
 	def function_end(self):
@@ -297,6 +248,7 @@ class InstaScrap(QWidget):
 		# Reset button
 		self.btn_scrap.setEnabled(True)
 		self.bar_progress.setVisible(False)
+		
 		os.chdir(self.path)
 
 	# Progressbar function
@@ -308,16 +260,24 @@ class InstaScrap(QWidget):
 		self.bar_progress.setValue(counter)
 		self.bar_progress.setFormat("{}: {}/{}".format(title, counter, length))
 
+		# reset the label and button
+		self.label_indicator.setText("")
+		self.btn_scrap.setEnabled(False)
+		
 	# Stuff when scrapper start
 	def function_start(self):
 
-			# Prevent the user to re-run the scrapper by disabling the button
-			self.btn_scrap.setEnabled(False)
-
+		# Prevent the user to re-run the scrapper by disabling the button
+		self.btn_scrap.setEnabled(False)
+		self.label_indicator.setText("")
+	
+	def function_error(self):
+		self.label_indicator.setText("No Results")
+			
 	# If something went wrong print output
 	def function_return(self, output):
 
-		print(output)
+		self.label_indicator.setText(output)
 
 if __name__ == '__main__':
 
