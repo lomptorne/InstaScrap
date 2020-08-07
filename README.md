@@ -7,4 +7,4 @@ Just launch the executable enter a hastag and a number of images you want !
 It will download the last number of image related to the hastag publicated on Instagram ! 
 
  
-Also available as an online tool on [Metrotopic](https://www.metrotopik.tk/instascrap)
+Also available as an online tool on [Metrotopic](https://www.metrotopic.tk/instascrap)
